@@ -26,6 +26,19 @@
       border: 1px solid #2b3444;
       overflow: hidden;
     }
+    #game::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: var(--bg-image, none);
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      filter: blur(2px) brightness(0.8);
+      transform: scale(1.03);
+      z-index: 0;
+      pointer-events: none;
+    }
     #hud {
       position: absolute;
       top: 0;
@@ -167,6 +180,8 @@
     const PERFECT_TAP_SFX = "music/10.mp3";
     const GOOD_TAP_SFX = "music/11.mp3";
     const RED_GAME_OVER_SFX = "music/12.mp3";
+    const BG_IMAGES = ["pics/1.png", "pics/2.png", "pics/3.png", "pics/4.png", "pics/5.png", "pics/6.png"];
+    const BG_IMAGE_ROTATE_MS = 60000;
 
     // ===== Circle Rules =====
     const PERFECT_ZONE = 0.3;
@@ -187,6 +202,7 @@
     const startBtn = document.getElementById("startBtn");
     const overlay = document.getElementById("overlay");
     const loseFillEl = document.getElementById("loseFill");
+    const gameEl = document.getElementById("game");
 
     // ===== RAF Helpers =====
     const raf = window.requestAnimationFrame
@@ -214,6 +230,7 @@
       floatingTexts: [],
       perfectWaves: [],
       currentBgTrack: "",
+      currentBgImage: "",
       inPrep: false,
       prepRemaining: 0,
       rafId: 0
@@ -506,6 +523,22 @@
       audio.play().catch(function () {});
     }
 
+    function getNextBgImage() {
+      if (BG_IMAGES.length <= 1) return BG_IMAGES[0] || "";
+      let image = BG_IMAGES[Math.floor(Math.random() * BG_IMAGES.length)];
+      while (image === state.currentBgImage) {
+        image = BG_IMAGES[Math.floor(Math.random() * BG_IMAGES.length)];
+      }
+      return image;
+    }
+
+    function applyNextBackgroundImage() {
+      const image = getNextBgImage();
+      if (!image) return;
+      state.currentBgImage = image;
+      gameEl.style.setProperty("--bg-image", "url('" + image + "')");
+    }
+
     function triggerWrongTapShake(circle) {
       circle.shakeUntil = performance.now() + WRONG_TAP_SHAKE_MS;
     }
@@ -709,6 +742,8 @@
     function init() {
       if (!ctx) { overlay.textContent = "Canvas is not supported"; startBtn.disabled = true; return; }
       ctx.imageSmoothingEnabled = false;
+      applyNextBackgroundImage();
+      window.setInterval(applyNextBackgroundImage, BG_IMAGE_ROTATE_MS);
       bgMusic.addEventListener("ended", function () {
         if (!state.running) return;
         playBgMusic();
