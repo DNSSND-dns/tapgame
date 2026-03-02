@@ -1,10 +1,12 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Adrenaline Mode</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
     body {
@@ -14,7 +16,7 @@
       place-items: center;
       background: #0e1014;
       color: #eef2f7;
-      font-family: Arial, sans-serif;
+      font-family: "Press Start 2P", "Courier New", monospace;
     }
     #game {
       position: relative;
@@ -29,7 +31,7 @@
       top: 0;
       left: 0;
       right: 0;
-      height: 64px;
+      height: 112px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -39,14 +41,19 @@
       z-index: 3;
     }
     #hudText {
+      flex: 1;
+      min-width: 0;
       display: grid;
-      gap: 2px;
-      font-size: 14px;
+      gap: 1px;
+      font-size: 8px;
       font-weight: 700;
       line-height: 1.15;
+      letter-spacing: 0.4px;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     #bar {
-      width: 165px;
+      width: 100%;
       height: 8px;
       border: 1px solid #3c4a64;
       background: #263149;
@@ -62,9 +69,11 @@
       border: 1px solid #3d4659;
       background: #202636;
       color: #eef2f7;
-      font-size: 13px;
+      font-size: 9px;
       font-weight: 700;
+      font-family: inherit;
       padding: 7px 12px;
+      margin-left: 8px;
       cursor: pointer;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
@@ -72,12 +81,12 @@
     button:hover { background: #283045; }
     #overlay {
       position: absolute;
-      inset: 64px 0 0 0;
+      inset: 112px 0 0 0;
       display: grid;
       place-items: center;
       text-align: center;
       white-space: pre-line;
-      font-size: 28px;
+      font-size: 18px;
       font-weight: 700;
       color: #eef2f7;
       text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
@@ -132,7 +141,7 @@
     // ===== Base Dimensions =====
     const WIDTH = 400;
     const HEIGHT = 600;
-    const HUD_HEIGHT = 64;
+    const HUD_HEIGHT = 112;
     const INITIAL_RADIUS = 70;
 
     // ===== Time, Level, and Shrink Config =====
@@ -149,6 +158,12 @@
     const PERFECT_WAVE_LIFE = 420;
     const PERFECT_WAVE_START_RADIUS = 10;
     const PERFECT_WAVE_END_RADIUS = 92;
+    const PIXEL_SIZE = 3;
+    const PIXEL_FONT = '"Press Start 2P", "Courier New", monospace';
+    const BG_TRACKS = ["music/1.mp3", "music/2.mp3", "music/3.mp3", "music/4.mp3", "music/5.mp3", "music/6.mp3"];
+    const PERFECT_TAP_SFX = "music/10.mp3";
+    const GOOD_TAP_SFX = "music/11.mp3";
+    const RED_GAME_OVER_SFX = "music/12.mp3";
 
     // ===== Circle Rules =====
     const PERFECT_ZONE = 0.3;
@@ -195,10 +210,28 @@
       lastFrameTime: 0,
       floatingTexts: [],
       perfectWaves: [],
+      currentBgTrack: "",
       inPrep: false,
       prepRemaining: 0,
       rafId: 0
     };
+
+    const bgMusic = new Audio();
+    bgMusic.preload = "auto";
+    bgMusic.loop = true;
+    bgMusic.volume = 0.35;
+
+    const perfectTapSfx = new Audio(PERFECT_TAP_SFX);
+    perfectTapSfx.preload = "auto";
+    perfectTapSfx.volume = 0.55;
+
+    const goodTapSfx = new Audio(GOOD_TAP_SFX);
+    goodTapSfx.preload = "auto";
+    goodTapSfx.volume = 0.35;
+
+    const redGameOverSfx = new Audio(RED_GAME_OVER_SFX);
+    redGameOverSfx.preload = "auto";
+    redGameOverSfx.volume = 0.6;
 
     // ===== Generic Utilities =====
     function clamp(v, min, max) { return Math.max(min, Math.min(v, max)); }
@@ -356,7 +389,7 @@
       const keep = [];
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = "bold 14px Arial, sans-serif";
+      ctx.font = "10px " + PIXEL_FONT;
       for (let i = 0; i < state.floatingTexts.length; i += 1) {
         const ft = state.floatingTexts[i];
         const age = now - ft.createdAt;
@@ -369,6 +402,46 @@
       }
       ctx.globalAlpha = 1;
       state.floatingTexts = keep;
+    }
+
+    function drawPixelCircle(x, y, r, color) {
+      const step = PIXEL_SIZE;
+      const rr = r * r;
+      ctx.fillStyle = color;
+      for (let gy = -r; gy <= r; gy += step) {
+        for (let gx = -r; gx <= r; gx += step) {
+          const px = gx + step * 0.5;
+          const py = gy + step * 0.5;
+          if (px * px + py * py <= rr) {
+            const dx = Math.round((x + gx) / step) * step;
+            const dy = Math.round((y + gy) / step) * step;
+            ctx.fillRect(dx, dy, step, step);
+          }
+        }
+      }
+    }
+
+    function drawPixelRing(x, y, innerR, outerR, color) {
+      const step = PIXEL_SIZE;
+      const inner = Math.max(0, innerR);
+      const outer = Math.max(inner + step, outerR);
+      const innerSq = inner * inner;
+      const outerSq = outer * outer;
+      const min = -outer;
+      const max = outer;
+      ctx.fillStyle = color;
+      for (let gy = min; gy <= max; gy += step) {
+        for (let gx = min; gx <= max; gx += step) {
+          const px = gx + step * 0.5;
+          const py = gy + step * 0.5;
+          const d2 = px * px + py * py;
+          if (d2 >= innerSq && d2 <= outerSq) {
+            const dx = Math.round((x + gx) / step) * step;
+            const dy = Math.round((y + gy) / step) * step;
+            ctx.fillRect(dx, dy, step, step);
+          }
+        }
+      }
     }
 
     function addPerfectWave(x, y) {
@@ -389,18 +462,37 @@
         const eased = 1 - Math.pow(1 - t, 3);
         const radius = PERFECT_WAVE_START_RADIUS + (PERFECT_WAVE_END_RADIUS - PERFECT_WAVE_START_RADIUS) * eased;
         const alpha = (1 - t) * 0.82;
-        const line = 1.5 + (1 - t) * 4.5;
-        ctx.beginPath();
-        ctx.arc(w.x, w.y, radius, 0, Math.PI * 2);
-        ctx.strokeStyle = "rgba(173, 223, 255, " + alpha.toFixed(3) + ")";
-        ctx.lineWidth = line;
-        ctx.shadowBlur = 18 * (1 - t);
-        ctx.shadowColor = "rgba(120, 198, 255, " + (alpha * 0.95).toFixed(3) + ")";
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+        const ringThickness = Math.max(PIXEL_SIZE, PIXEL_SIZE * (1.8 - t * 0.8));
+        drawPixelRing(
+          w.x,
+          w.y,
+          radius - ringThickness,
+          radius,
+          "rgba(173, 223, 255, " + alpha.toFixed(3) + ")"
+        );
         keep.push(w);
       }
       state.perfectWaves = keep;
+    }
+
+    function playBgMusic() {
+      const track = BG_TRACKS[Math.floor(Math.random() * BG_TRACKS.length)];
+      if (state.currentBgTrack !== track) {
+        bgMusic.src = track;
+        state.currentBgTrack = track;
+      }
+      bgMusic.currentTime = 0;
+      bgMusic.play().catch(function () {});
+    }
+
+    function stopBgMusic() {
+      bgMusic.pause();
+      bgMusic.currentTime = 0;
+    }
+
+    function playSfx(audio) {
+      audio.currentTime = 0;
+      audio.play().catch(function () {});
     }
 
     // ===== Main Canvas Draw =====
@@ -411,23 +503,23 @@
       for (let i = 0; i < state.circles.length; i += 1) {
         const c = state.circles[i];
         if (c.correct) {
-          ctx.beginPath(); ctx.arc(c.x, c.y, state.radius, 0, Math.PI * 2); ctx.fillStyle = "#2e8fff"; ctx.fill();
-          ctx.beginPath(); ctx.arc(c.x, c.y, state.radius * GOOD_ZONE, 0, Math.PI * 2); ctx.fillStyle = "#58aaff"; ctx.fill();
-          ctx.beginPath(); ctx.arc(c.x, c.y, state.radius * PERFECT_ZONE, 0, Math.PI * 2); ctx.fillStyle = "#87c4ff"; ctx.fill();
+          drawPixelCircle(c.x, c.y, state.radius, "#2e8fff");
+          drawPixelCircle(c.x, c.y, state.radius * GOOD_ZONE, "#58aaff");
+          drawPixelCircle(c.x, c.y, state.radius * PERFECT_ZONE, "#87c4ff");
           if (state.radius > 24) {
             ctx.fillStyle = "rgba(255,255,255,0.95)";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.font = "bold 11px Arial, sans-serif";
+            ctx.font = "8px " + PIXEL_FONT;
             ctx.fillText("+1.0s", c.x, c.y);
             if (state.radius > 34) {
-              ctx.font = "bold 10px Arial, sans-serif";
+              ctx.font = "7px " + PIXEL_FONT;
               ctx.fillText("+0.5s", c.x, c.y + state.radius * 0.44);
               ctx.fillText("+0.0s", c.x, c.y - state.radius * 0.68);
             }
           }
         } else {
-          ctx.beginPath(); ctx.arc(c.x, c.y, state.radius, 0, Math.PI * 2); ctx.fillStyle = c.color; ctx.fill();
+          drawPixelCircle(c.x, c.y, state.radius, c.color);
         }
       }
       drawPerfectWaves(now);
@@ -439,6 +531,7 @@
       state.running = false;
       caf(state.rafId);
       state.rafId = 0;
+      stopBgMusic();
       if (win && (state.bestTaps === null || state.taps < state.bestTaps)) {
         state.bestTaps = state.taps;
         saveBestTaps();
@@ -529,9 +622,11 @@
             bonus = 1.0;
             zone = "PERFECT";
             addPerfectWave(p.x, p.y);
+            playSfx(perfectTapSfx);
           } else if (d <= state.radius * GOOD_ZONE) {
             bonus = 0.5;
             zone = "GOOD";
+            playSfx(goodTapSfx);
           }
           addFloatingText(p.x, p.y, zone + " +" + bonus.toFixed(1) + "s", "#d9efff");
 
@@ -550,7 +645,11 @@
           return;
         }
 
-        if (c.isRed) { endGame(false); return; }
+        if (c.isRed) {
+          playSfx(redGameOverSfx);
+          endGame(false);
+          return;
+        }
         return; // fake color click: ignore
       }
       // empty click: ignore
@@ -571,6 +670,7 @@
       state.inPrep = false;
       state.prepRemaining = 0;
       state.radius = INITIAL_RADIUS;
+      playBgMusic();
       overlay.style.display = "none";
       startBtn.textContent = "Restart";
       updateHud();
@@ -583,6 +683,7 @@
     // ===== App Init =====
     function init() {
       if (!ctx) { overlay.textContent = "Canvas is not supported"; startBtn.disabled = true; return; }
+      ctx.imageSmoothingEnabled = false;
       loadBestTaps();
       updateHud();
       draw();
