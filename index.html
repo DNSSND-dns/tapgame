@@ -218,7 +218,7 @@
 
     const bgMusic = new Audio();
     bgMusic.preload = "auto";
-    bgMusic.loop = true;
+    bgMusic.loop = false;
     bgMusic.volume = 0.35;
 
     const perfectTapSfx = new Audio(PERFECT_TAP_SFX);
@@ -475,12 +475,20 @@
       state.perfectWaves = keep;
     }
 
-    function playBgMusic() {
-      const track = BG_TRACKS[Math.floor(Math.random() * BG_TRACKS.length)];
-      if (state.currentBgTrack !== track) {
-        bgMusic.src = track;
-        state.currentBgTrack = track;
+    function getNextBgTrack() {
+      if (BG_TRACKS.length <= 1) return BG_TRACKS[0] || "";
+      let track = BG_TRACKS[Math.floor(Math.random() * BG_TRACKS.length)];
+      while (track === state.currentBgTrack) {
+        track = BG_TRACKS[Math.floor(Math.random() * BG_TRACKS.length)];
       }
+      return track;
+    }
+
+    function playBgMusic() {
+      const track = getNextBgTrack();
+      if (!track) return;
+      bgMusic.src = track;
+      state.currentBgTrack = track;
       bgMusic.currentTime = 0;
       bgMusic.play().catch(function () {});
     }
@@ -684,6 +692,10 @@
     function init() {
       if (!ctx) { overlay.textContent = "Canvas is not supported"; startBtn.disabled = true; return; }
       ctx.imageSmoothingEnabled = false;
+      bgMusic.addEventListener("ended", function () {
+        if (!state.running) return;
+        playBgMusic();
+      });
       loadBestTaps();
       updateHud();
       draw();
