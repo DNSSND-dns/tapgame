@@ -200,6 +200,23 @@
       font-size: 8px;
       color: #9aacbf;
     }
+    #githubComments {
+      border: 1px solid #2b3444;
+      background: #171a21;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+    #githubComments h2 {
+      margin: 0;
+      font-size: 10px;
+    }
+    #githubCommentsHint {
+      margin: 0;
+      font-size: 8px;
+      line-height: 1.5;
+      color: #9aacbf;
+    }
   </style>
 </head>
 <body>
@@ -231,6 +248,12 @@
       </form>
       <p id="emptyComments" class="emptyComments">No comments yet.</p>
       <ul id="feedbackList" aria-live="polite"></ul>
+    </section>
+
+    <section id="githubComments" aria-label="GitHub Comments">
+      <h2>Global Comments (GitHub)</h2>
+      <p id="githubCommentsHint"></p>
+      <div id="utterancesThread"></div>
     </section>
   </div>
 
@@ -274,7 +297,8 @@
     const FAKE_COLORS = ["#35c26b", "#f2c43c", "#a55cff", "#ff9a2f"];
     const BEST_TAPS_KEY = "shrinkingPanicBestTaps";
     const FEEDBACK_KEY = "shrinkingPanicFeedback";
-    const MAX_COMMENTS = 30;
+    const MAX_COMMENTS = 1000;
+    const GITHUB_REPO_FOR_COMMENTS = "DNSSND-dns/tapgame";
 
     // ===== DOM Elements =====
     const canvas = document.getElementById("canvas");
@@ -294,6 +318,8 @@
     const feedbackTextEl = document.getElementById("feedbackText");
     const feedbackListEl = document.getElementById("feedbackList");
     const emptyCommentsEl = document.getElementById("emptyComments");
+    const utterancesThreadEl = document.getElementById("utterancesThread");
+    const githubCommentsHintEl = document.getElementById("githubCommentsHint");
 
     // ===== RAF Helpers =====
     const raf = window.requestAnimationFrame
@@ -449,6 +475,24 @@
       saveComments();
       renderComments();
       feedbackTextEl.value = "";
+    }
+
+    function initGitHubComments() {
+      if (!utterancesThreadEl || !githubCommentsHintEl) return;
+      if (!GITHUB_REPO_FOR_COMMENTS) {
+        githubCommentsHintEl.textContent = "Set GITHUB_REPO_FOR_COMMENTS in index.html to enable shared comments.";
+        return;
+      }
+      githubCommentsHintEl.textContent = "Comments are shared via GitHub Issues. Users sign in with GitHub.";
+      const script = document.createElement("script");
+      script.src = "https://utteranc.es/client.js";
+      script.setAttribute("repo", GITHUB_REPO_FOR_COMMENTS);
+      script.setAttribute("issue-term", "pathname");
+      script.setAttribute("label", "comment");
+      script.setAttribute("theme", "github-dark");
+      script.setAttribute("crossorigin", "anonymous");
+      script.async = true;
+      utterancesThreadEl.appendChild(script);
     }
 
     // ===== Difficulty Rules =====
@@ -930,6 +974,7 @@
       loadComments();
       updateHud();
       renderComments();
+      initGitHubComments();
       draw();
       startBtn.addEventListener("click", startGame);
       canvas.addEventListener("click", handleClick);
