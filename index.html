@@ -17,6 +17,13 @@
       background: #0e1014;
       color: #eef2f7;
       font-family: "Press Start 2P", "Courier New", monospace;
+      padding: 24px 12px;
+    }
+    #app {
+      width: 100%;
+      max-width: 400px;
+      display: grid;
+      gap: 12px;
     }
     #game {
       position: relative;
@@ -35,7 +42,7 @@
       background-repeat: no-repeat;
       filter: blur(2px) brightness(0.8);
       transform: scale(1.03);
-      z-index: 0;
+      z-index: 1;
       pointer-events: none;
     }
     #hud {
@@ -50,7 +57,7 @@
       padding: 8px 10px;
       background: #10151e;
       border-bottom: 1px solid #2b3444;
-      z-index: 3;
+      z-index: 4;
     }
     #hudText {
       flex: 1;
@@ -112,7 +119,7 @@
       background: #ff2f2f;
       opacity: 0;
       pointer-events: none;
-      z-index: 4;
+      z-index: 5;
     }
     #loseFill.show {
       animation: loseFillAnim 450ms ease-out;
@@ -126,28 +133,105 @@
       position: absolute;
       inset: 0;
       display: block;
-      z-index: 1;
+      z-index: 2;
       touch-action: none;
+    }
+    #feedback {
+      border: 1px solid #2b3444;
+      background: #171a21;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+    #feedback h2 {
+      margin: 0;
+      font-size: 10px;
+    }
+    #feedbackForm {
+      display: grid;
+      gap: 8px;
+    }
+    #feedbackForm button {
+      margin-left: 0;
+      justify-self: start;
+    }
+    #feedback input,
+    #feedback textarea {
+      width: 100%;
+      border: 1px solid #3c4a64;
+      background: #10151e;
+      color: #eef2f7;
+      font: inherit;
+      font-size: 8px;
+      padding: 8px;
+      resize: vertical;
+    }
+    #feedback textarea {
+      min-height: 80px;
+    }
+    #feedbackList {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 6px;
+      max-height: 180px;
+      overflow: auto;
+    }
+    .commentItem {
+      border: 1px solid #2b3444;
+      background: #10151e;
+      padding: 8px;
+      display: grid;
+      gap: 4px;
+      font-size: 8px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+    .commentAuthor {
+      color: #7fd4ff;
+    }
+    .commentTime {
+      color: #9aacbf;
+      font-size: 7px;
+    }
+    .emptyComments {
+      margin: 0;
+      font-size: 8px;
+      color: #9aacbf;
     }
   </style>
 </head>
 <body>
-  <div id="game">
-    <div id="bgLayer"></div>
-    <div id="hud">
-      <div id="hudText">
-        <div id="score">Taps: 0</div>
-        <div id="best">Best Taps: -</div>
-        <div id="time">Time Left: 00:30</div>
-        <div id="target">Level 1 | Target: 60s</div>
-        <div id="next">Next: Time 25s | Target 70s</div>
-        <div id="bar"><div id="fill"></div></div>
+  <div id="app">
+    <div id="game">
+      <div id="bgLayer"></div>
+      <div id="hud">
+        <div id="hudText">
+          <div id="score">Taps: 0</div>
+          <div id="best">Best Taps: -</div>
+          <div id="time">Time Left: 00:30</div>
+          <div id="target">Level 1 | Target: 60s</div>
+          <div id="next">Next: Time 25s | Target 70s</div>
+          <div id="bar"><div id="fill"></div></div>
+        </div>
+        <button id="startBtn" type="button">Start</button>
       </div>
-      <button id="startBtn" type="button">Start</button>
+      <div id="overlay">Press Start</div>
+      <canvas id="canvas" width="400" height="600"></canvas>
+      <div id="loseFill"></div>
     </div>
-    <div id="overlay">Press Start</div>
-    <canvas id="canvas" width="400" height="600"></canvas>
-    <div id="loseFill"></div>
+
+    <section id="feedback" aria-label="Feedback">
+      <h2>Feedback</h2>
+      <form id="feedbackForm">
+        <input id="feedbackName" name="name" type="text" maxlength="24" placeholder="Your name" required>
+        <textarea id="feedbackText" name="comment" maxlength="280" placeholder="Your comment" required></textarea>
+        <button type="submit">Send</button>
+      </form>
+      <p id="emptyComments" class="emptyComments">No comments yet.</p>
+      <ul id="feedbackList" aria-live="polite"></ul>
+    </section>
   </div>
 
   <script>
@@ -189,6 +273,8 @@
     const BASE_RED_CHANCE = 0.25; // active after 10 score
     const FAKE_COLORS = ["#35c26b", "#f2c43c", "#a55cff", "#ff9a2f"];
     const BEST_TAPS_KEY = "shrinkingPanicBestTaps";
+    const FEEDBACK_KEY = "shrinkingPanicFeedback";
+    const MAX_COMMENTS = 30;
 
     // ===== DOM Elements =====
     const canvas = document.getElementById("canvas");
@@ -203,6 +289,11 @@
     const overlay = document.getElementById("overlay");
     const loseFillEl = document.getElementById("loseFill");
     const bgLayerEl = document.getElementById("bgLayer");
+    const feedbackFormEl = document.getElementById("feedbackForm");
+    const feedbackNameEl = document.getElementById("feedbackName");
+    const feedbackTextEl = document.getElementById("feedbackText");
+    const feedbackListEl = document.getElementById("feedbackList");
+    const emptyCommentsEl = document.getElementById("emptyComments");
 
     // ===== RAF Helpers =====
     const raf = window.requestAnimationFrame
@@ -233,7 +324,8 @@
       currentBgImage: "",
       inPrep: false,
       prepRemaining: 0,
-      rafId: 0
+      rafId: 0,
+      comments: []
     };
 
     const bgMusic = new Audio();
@@ -274,6 +366,89 @@
 
     function saveBestTaps() {
       if (state.bestTaps !== null) localStorage.setItem(BEST_TAPS_KEY, String(state.bestTaps));
+    }
+
+    function loadComments() {
+      let parsed = [];
+      try {
+        const raw = localStorage.getItem(FEEDBACK_KEY);
+        if (raw) parsed = JSON.parse(raw);
+      } catch (_err) {
+        parsed = [];
+      }
+      if (!Array.isArray(parsed)) parsed = [];
+      state.comments = parsed
+        .filter(function (item) {
+          return item
+            && typeof item.name === "string"
+            && typeof item.text === "string"
+            && typeof item.createdAt === "number";
+        })
+        .slice(-MAX_COMMENTS);
+    }
+
+    function saveComments() {
+      localStorage.setItem(FEEDBACK_KEY, JSON.stringify(state.comments));
+    }
+
+    function formatCommentDate(ms) {
+      const d = new Date(ms);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const min = String(d.getMinutes()).padStart(2, "0");
+      return yyyy + "-" + mm + "-" + dd + " " + hh + ":" + min;
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function renderComments() {
+      if (!feedbackListEl || !emptyCommentsEl) return;
+      if (state.comments.length === 0) {
+        feedbackListEl.innerHTML = "";
+        emptyCommentsEl.style.display = "block";
+        return;
+      }
+      emptyCommentsEl.style.display = "none";
+      const html = [];
+      for (let i = state.comments.length - 1; i >= 0; i -= 1) {
+        const item = state.comments[i];
+        html.push(
+          '<li class="commentItem">'
+          + '<strong class="commentAuthor">' + escapeHtml(item.name) + "</strong>"
+          + "<div>" + escapeHtml(item.text) + "</div>"
+          + '<span class="commentTime">' + formatCommentDate(item.createdAt) + "</span>"
+          + "</li>"
+        );
+      }
+      feedbackListEl.innerHTML = html.join("");
+    }
+
+    function handleFeedbackSubmit(e) {
+      e.preventDefault();
+      if (!feedbackNameEl || !feedbackTextEl) return;
+      const name = feedbackNameEl.value.trim();
+      const text = feedbackTextEl.value.trim();
+      if (!name || !text) return;
+      state.comments.push({
+        name: name,
+        text: text,
+        createdAt: Date.now()
+      });
+      if (state.comments.length > MAX_COMMENTS) {
+        state.comments = state.comments.slice(state.comments.length - MAX_COMMENTS);
+      }
+      saveComments();
+      renderComments();
+      feedbackTextEl.value = "";
     }
 
     // ===== Difficulty Rules =====
@@ -536,7 +711,10 @@
       const image = getNextBgImage();
       if (!image) return;
       state.currentBgImage = image;
-      bgLayerEl.style.backgroundImage = "url('" + image + "')";
+      const bgValue = "url('" + image + "')";
+      if (bgLayerEl) bgLayerEl.style.backgroundImage = bgValue;
+      const gameEl = document.getElementById("game");
+      if (gameEl) gameEl.style.backgroundImage = bgValue;
     }
 
     function triggerWrongTapShake(circle) {
@@ -749,11 +927,14 @@
         playBgMusic();
       });
       loadBestTaps();
+      loadComments();
       updateHud();
+      renderComments();
       draw();
       startBtn.addEventListener("click", startGame);
       canvas.addEventListener("click", handleClick);
       canvas.addEventListener("touchstart", handleClick, { passive: false });
+      if (feedbackFormEl) feedbackFormEl.addEventListener("submit", handleFeedbackSubmit);
     }
 
     init();
