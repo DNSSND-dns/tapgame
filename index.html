@@ -26,11 +26,10 @@
       border: 1px solid #2b3444;
       overflow: hidden;
     }
-    #game::before {
-      content: "";
+    #bgLayer {
       position: absolute;
       inset: 0;
-      background-image: var(--bg-image, none);
+      background-image: none;
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
@@ -134,6 +133,7 @@
 </head>
 <body>
   <div id="game">
+    <div id="bgLayer"></div>
     <div id="hud">
       <div id="hudText">
         <div id="score">Taps: 0</div>
@@ -202,7 +202,7 @@
     const startBtn = document.getElementById("startBtn");
     const overlay = document.getElementById("overlay");
     const loseFillEl = document.getElementById("loseFill");
-    const gameEl = document.getElementById("game");
+    const bgLayerEl = document.getElementById("bgLayer");
 
     // ===== RAF Helpers =====
     const raf = window.requestAnimationFrame
@@ -536,7 +536,7 @@
       const image = getNextBgImage();
       if (!image) return;
       state.currentBgImage = image;
-      gameEl.style.setProperty("--bg-image", "url('" + image + "')");
+      bgLayerEl.style.backgroundImage = "url('" + image + "')";
     }
 
     function triggerWrongTapShake(circle) {
