@@ -1,0 +1,232 @@
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: center;
+      background: #0e1014;
+      color: #eef2f7;
+      font-family: "Press Start 2P", "Courier New", monospace;
+      padding: 0;
+    }
+    #app {
+      width: 100%;
+      max-width: 400px;
+      display: grid;
+      gap: 12px;
+    }
+    #game {
+      position: relative;
+      width: 400px;
+      height: 600px;
+      background: #171a21;
+      border: 1px solid #2b3444;
+      overflow: hidden;
+    }
+    #bgLayer {
+      position: absolute;
+      inset: 0;
+      background-image: none;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      filter: blur(2px) brightness(0.8);
+      transform: scale(1.03);
+      z-index: 1;
+      pointer-events: none;
+    }
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 112px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-rows: auto auto;
+      align-items: start;
+      padding: 8px 10px;
+      background: #10151e;
+      border-bottom: 1px solid #2b3444;
+      transition: background-color 70ms linear, border-bottom-color 70ms linear;
+      z-index: 4;
+    }
+    #hudText {
+      grid-column: 1;
+      grid-row: 1;
+      flex: 1;
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+      font-size: 8px;
+      font-weight: 700;
+      line-height: 1.15;
+      letter-spacing: 0.4px;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    #hudCenterMeter {
+      grid-column: 1 / 3;
+      grid-row: 2;
+      justify-self: center;
+      align-self: end;
+      width: 250px;
+      max-width: calc(100% - 130px);
+      pointer-events: none;
+    }
+    #timeMeter {
+      width: 100%;
+      display: grid;
+      justify-items: center;
+      gap: 4px;
+    }
+    #bar {
+      width: 100%;
+      height: 12px;
+      margin: 0 auto;
+      border: 1px solid #4a5d80;
+      background: #1d2738;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    #fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #2e8fff, #7fd4ff);
+      transition: width 80ms linear;
+    }
+    #time {
+      width: 100%;
+      text-align: center;
+    }
+    button {
+      grid-column: 2;
+      grid-row: 1;
+      justify-self: end;
+      align-self: start;
+      border: 1px solid #3d4659;
+      background: #202636;
+      color: #eef2f7;
+      font-size: 9px;
+      font-weight: 700;
+      font-family: inherit;
+      padding: 7px 12px;
+      margin-left: 8px;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button:hover { background: #283045; }
+    #overlay {
+      position: absolute;
+      inset: 112px 0 0 0;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      white-space: pre-line;
+      font-size: 18px;
+      font-weight: 700;
+      color: #eef2f7;
+      text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+      z-index: 2;
+      pointer-events: none;
+      padding: 16px;
+    }
+    #loseFill {
+      position: absolute;
+      inset: 0;
+      background: #ff2f2f;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 5;
+    }
+    #loseFill.show {
+      animation: loseFillAnim 450ms ease-out;
+    }
+    @keyframes loseFillAnim {
+      0% { opacity: 0; }
+      35% { opacity: 0.82; }
+      100% { opacity: 0; }
+    }
+    canvas {
+      position: absolute;
+      inset: 0;
+      display: block;
+      z-index: 2;
+      touch-action: none;
+    }
+    #feedback {
+      border: 1px solid #2b3444;
+      background: #171a21;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+    #feedback h2 {
+      margin: 0;
+      font-size: 10px;
+    }
+    #feedbackForm {
+      display: grid;
+      gap: 8px;
+    }
+    #feedbackForm button {
+      margin-left: 0;
+      justify-self: start;
+    }
+    #feedback input,
+    #feedback textarea {
+      width: 100%;
+      border: 1px solid #3c4a64;
+      background: #10151e;
+      color: #eef2f7;
+      font: inherit;
+      font-size: 8px;
+      padding: 8px;
+      resize: vertical;
+    }
+    #feedback textarea {
+      min-height: 80px;
+    }
+    #feedbackList {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 6px;
+      max-height: 180px;
+      overflow: auto;
+    }
+    .commentItem {
+      border: 1px solid #2b3444;
+      background: #10151e;
+      padding: 8px;
+      display: grid;
+      gap: 4px;
+      font-size: 8px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+    .commentAuthor {
+      color: #7fd4ff;
+    }
+    .commentTime {
+      color: #9aacbf;
+      font-size: 7px;
+    }
+    .emptyComments {
+      margin: 0;
+      font-size: 8px;
+      color: #9aacbf;
+    }
+    #feedbackStatus {
+      margin: 0;
+      font-size: 8px;
+      line-height: 1.5;
+      color: #9aacbf;
+    }
+    #feedbackStatus.error {
+      color: #ff8f8f;
+    }
