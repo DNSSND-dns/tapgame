@@ -5,12 +5,18 @@
     const INITIAL_RADIUS = 70;
 
     // ===== Time, Level, and Shrink Config =====
-    const START_TIME = 30;
-    const GOAL_TIME_START = 60;
-    const GOAL_TIME_STEP = 10;
-    const MIN_LEVEL_START_TIME = 5;
+    const LEVELS = [
+      { startTime: 20, targetTime: 40 },
+      { startTime: 15, targetTime: 50 },
+      { startTime: 10, targetTime: 60 },
+      { startTime: 5, targetTime: 70 }
+    ];
     const PREP_TIME = 3;
-    const MAX_LEVEL = 6;
+    const MAX_LEVEL = LEVELS.length;
+    const AUTO_TAP_INTERVAL_MS = 90;
+    const HARD_SHRINK_START = 2.0;
+    const HARD_SHRINK_GOAL = 0.9;
+    const HARD_SECOND_BLUE_CHANCE = 0.5;
     const TIMER_DRAIN_RATE = 1.0;
     const BASE_SHRINK = 1.8;
     const MIN_SHRINK = 1.3;
@@ -40,6 +46,7 @@
     const SUPABASE_URL = "https://tztqtjvhaqkhfbtdtkqp.supabase.co"; // e.g. https://xxxx.supabase.co
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6dHF0anZoYXFraGZidGR0a3FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NTkxOTMsImV4cCI6MjA4ODAzNTE5M30.qeKAO46tBsrmqn-A9x4a2ObT6-1m7qv8VncHLmymhuI"; // Project Settings -> API -> anon public
     const SUPABASE_FEEDBACK_TABLE = "feedback_comments";
+    const LEVEL1 = LEVELS[0];
 
     // ===== DOM Elements =====
     const canvas = document.getElementById("canvas");
@@ -51,6 +58,7 @@
     const targetEl = document.getElementById("target");
     const fillEl = document.getElementById("fill");
     const startBtn = document.getElementById("startBtn");
+    const autoBtn = document.getElementById("autoBtn");
     const overlay = document.getElementById("overlay");
     const loseFillEl = document.getElementById("loseFill");
     const bgLayerEl = document.getElementById("bgLayer");
@@ -75,9 +83,9 @@
       taps: 0,
       bestTaps: null,
       level: 1,
-      goalTime: GOAL_TIME_START,
-      levelStartTime: START_TIME,
-      timeLeft: START_TIME,
+      goalTime: LEVEL1.targetTime,
+      levelStartTime: LEVEL1.startTime,
+      timeLeft: LEVEL1.startTime,
       circles: [],
       radius: INITIAL_RADIUS,
       spawnTime: 0,
@@ -91,7 +99,12 @@
       inPrep: false,
       prepRemaining: 0,
       rafId: 0,
-      comments: []
+      comments: [],
+      autoTapEnabled: false,
+      autoTapAccumMs: 0,
+      perfectTapCount: 0,
+      hardMode: false,
+      hardTapCount: 0
     };
     let supabaseClient = null;
 
@@ -276,47 +289,137 @@
       return a;
     }
 
+    function getLevelConfig(level) {
+      return LEVELS[Math.max(0, Math.min(LEVELS.length - 1, level - 1))];
+    }
+
+    function updateShrinkAfterSuccess(reactionTime) {
+      if (state.hardMode) {
+        state.hardTapCount += 1;
+        const hardProgress = clamp(state.hardTapCount / Math.max(1, state.goalTime), 0, 1);
+        state.currentShrink = HARD_SHRINK_START - (HARD_SHRINK_START - HARD_SHRINK_GOAL) * hardProgress;
+        return;
+      }
+      if (reactionTime < 0.5) state.currentShrink += 0.1;
+      else if (reactionTime > 1.0) state.currentShrink -= 0.1;
+      state.currentShrink = clamp(state.currentShrink, MIN_SHRINK, MAX_SHRINK);
+    }
+
     // ===== HUD Rendering =====
     function updateHud() {
       scoreEl.textContent = "Taps: " + state.taps;
       bestEl.textContent = "Best Taps: " + (state.bestTaps === null ? "-" : state.bestTaps);
       timeEl.textContent = "Time Left: " + formatTime(state.timeLeft);
-      targetEl.textContent = "Level " + state.level + " | Time " + state.levelStartTime + "s | Target " + state.goalTime + "s";
+      if (state.hardMode) {
+        targetEl.textContent = "Hard | Time " + state.levelStartTime + "s | Target " + state.goalTime + "s | Shrink 2.0->0.9";
+      } else {
+        targetEl.textContent = "Level " + state.level + " | Time " + state.levelStartTime + "s | Target " + state.goalTime + "s";
+      }
       const ratio = clamp(state.timeLeft / state.goalTime, 0, 1);
       fillEl.style.width = (ratio * 100).toFixed(1) + "%";
 
       if (hudEl) {
         const levelRatio = clamp(state.timeLeft / Math.max(1, state.levelStartTime), 0, 1);
         const urgency = 1 - levelRatio;
-        const beatMs = 5000 - urgency * 4000; // 5s -> 1s
-        const phase = (performance.now() % beatMs) / beatMs;
-        const wave = Math.sin(phase * Math.PI * 2) * 0.5 + 0.5;
-        const pulse = wave * urgency;
+        const goalNear = clamp((ratio - 0.7) / 0.3, 0, 1);
 
-        const r = Math.round(clamp(6 + urgency * 120 + pulse * 90, 0, 255));
-        const g = Math.round(clamp(6 + (1 - urgency) * 14 - pulse * 8, 0, 255));
-        const b = Math.round(clamp(6 + (1 - urgency) * 18 - pulse * 12, 0, 255));
+        const beatMsRed = 5000 - urgency * 4000; // 5s -> 1s
+        const phaseRed = (performance.now() % beatMsRed) / beatMsRed;
+        const waveRed = Math.sin(phaseRed * Math.PI * 2) * 0.5 + 0.5;
+        const redPulse = waveRed * urgency;
+
+        const beatMsGreen = 5000 - goalNear * 4000; // 5s -> 1s
+        const phaseGreen = (performance.now() % beatMsGreen) / beatMsGreen;
+        const waveGreen = Math.sin(phaseGreen * Math.PI * 2) * 0.5 + 0.5;
+        const greenPulse = waveGreen * goalNear;
+
+        const r = Math.round(clamp(6 + urgency * 120 + redPulse * 90 - greenPulse * 24, 0, 255));
+        const g = Math.round(clamp(6 + goalNear * 120 + greenPulse * 95 + urgency * 8 - redPulse * 16, 0, 255));
+        const b = Math.round(clamp(6 + (1 - urgency) * 18 - redPulse * 12 - greenPulse * 10, 0, 255));
         hudEl.style.backgroundColor = "rgb(" + r + ", " + g + ", " + b + ")";
 
-        const borderR = Math.round(clamp(43 + urgency * 70 + pulse * 55, 0, 255));
-        const borderG = Math.round(clamp(52 - urgency * 14 - pulse * 8, 0, 255));
-        const borderB = Math.round(clamp(68 - urgency * 26 - pulse * 14, 0, 255));
+        const borderR = Math.round(clamp(43 + urgency * 70 + redPulse * 55 - greenPulse * 22, 0, 255));
+        const borderG = Math.round(clamp(52 + goalNear * 78 + greenPulse * 52 - redPulse * 14, 0, 255));
+        const borderB = Math.round(clamp(68 - urgency * 26 - redPulse * 14 - greenPulse * 16, 0, 255));
         hudEl.style.borderBottomColor = "rgb(" + borderR + ", " + borderG + ", " + borderB + ")";
       }
     }
 
+    function startHardMode() {
+      const hardBase = Math.max(1, Math.floor(state.perfectTapCount / 4));
+      const hardStartTime = hardBase;
+      const hardTargetTime = hardBase * 2;
+      state.hardMode = true;
+      state.level = MAX_LEVEL + 1;
+      state.goalTime = hardTargetTime;
+      state.levelStartTime = hardStartTime;
+      state.timeLeft = hardStartTime;
+      state.currentShrink = HARD_SHRINK_START;
+      state.hardTapCount = 0;
+      state.inPrep = true;
+      state.prepRemaining = PREP_TIME;
+      state.circles = [];
+      updateHud();
+      overlay.textContent = "HARD MODE\nGet Ready: " + Math.ceil(state.prepRemaining);
+      overlay.style.display = "grid";
+      draw();
+    }
+
+    function setAutoTap(enabled) {
+      state.autoTapEnabled = Boolean(enabled);
+      state.autoTapAccumMs = 0;
+      if (autoBtn) autoBtn.textContent = state.autoTapEnabled ? "Auto: ON" : "Auto: OFF";
+    }
+
+    function toggleAutoTap() {
+      setAutoTap(!state.autoTapEnabled);
+    }
+
+    function runAutoTap() {
+      if (!state.running || state.inPrep || !state.autoTapEnabled) return;
+      let correct = null;
+      for (let i = 0; i < state.circles.length; i += 1) {
+        if (state.circles[i].correct) {
+          correct = state.circles[i];
+          break;
+        }
+      }
+      if (!correct) return;
+
+      const tapTime = performance.now();
+      const bonus = 1.0;
+      addPerfectWave(correct.x, correct.y);
+      playSfx(perfectTapSfx);
+      addFloatingText(correct.x, correct.y, "PERFECT +" + bonus.toFixed(1) + "s", "#d9efff");
+      state.perfectTapCount += 1;
+
+      const reactionTime = (tapTime - state.spawnTime) / 1000;
+      updateShrinkAfterSuccess(reactionTime);
+
+      state.timeLeft = Math.min(state.timeLeft + bonus, state.goalTime);
+      state.taps += 1;
+
+      if (state.timeLeft >= state.goalTime) { applyNextLevel(); return; }
+      updateHud();
+      spawnCircles();
+      draw();
+    }
+
     // ===== Level Transition =====
     function applyNextLevel() {
-      if (state.level >= MAX_LEVEL) {
+      if (!state.hardMode && state.level >= MAX_LEVEL) {
+        startHardMode();
+        return;
+      }
+      if (state.hardMode) {
         endGame(true);
         return;
       }
-      const nextLevel = state.level + 1;
-      const nextStartTime = Math.max(MIN_LEVEL_START_TIME, START_TIME - (nextLevel - 1) * 5);
-      state.level = nextLevel;
-      state.goalTime += GOAL_TIME_STEP;
-      state.levelStartTime = nextStartTime;
-      state.timeLeft = state.levelStartTime;
+      state.level += 1;
+      const levelConfig = getLevelConfig(state.level);
+      state.goalTime = levelConfig.targetTime;
+      state.levelStartTime = levelConfig.startTime;
+      state.timeLeft = levelConfig.startTime;
       state.inPrep = true;
       state.prepRemaining = PREP_TIME;
       updateHud();
@@ -329,11 +432,14 @@
     // ===== Circle Build (Correct + Fakes) =====
     function buildCircles() {
       const count = state.taps >= 10 ? Math.max(2, getCircleCount()) : getCircleCount();
-      const fakeCount = count - 1;
+      const minCount = state.hardMode ? Math.max(2, count) : count;
+      const secondBlue = state.hardMode && Math.random() < HARD_SECOND_BLUE_CHANCE;
       const redChance = getRedChance();
       const colors = shuffle(FAKE_COLORS);
       let colorIdx = 0;
       const circles = [{ x: 0, y: 0, correct: true, isRed: false, color: "#2e8fff", shakeUntil: 0 }];
+      if (secondBlue) circles.push({ x: 0, y: 0, correct: true, isRed: false, color: "#2e8fff", shakeUntil: 0 });
+      const fakeCount = Math.max(0, minCount - circles.length);
 
       for (let i = 0; i < fakeCount; i += 1) {
         const red = Math.random() < redChance;
@@ -588,8 +694,8 @@
       }
       updateHud();
       overlay.textContent = win
-        ? "YOU WIN\nTaps: " + state.taps + "\nTime Left: " + state.timeLeft.toFixed(1) + "s"
-        : "Game Over\nTaps: " + state.taps + "\nTime Left: " + state.timeLeft.toFixed(1) + "s";
+        ? "YOU WIN\nTaps: " + state.taps + "\nPerfect: " + state.perfectTapCount + "\nTime Left: " + state.timeLeft.toFixed(1) + "s"
+        : "Game Over\nTaps: " + state.taps + "\nPerfect: " + state.perfectTapCount + "\nTime Left: " + state.timeLeft.toFixed(1) + "s";
       overlay.style.display = "grid";
       startBtn.textContent = "Restart";
       state.circles = [];
@@ -615,12 +721,23 @@
           overlay.style.display = "none";
           spawnCircles();
         } else {
-          overlay.textContent = "LEVEL " + state.level + "\nGet Ready: " + Math.ceil(state.prepRemaining);
+          overlay.textContent = state.hardMode
+            ? "HARD MODE\nGet Ready: " + Math.ceil(state.prepRemaining)
+            : "LEVEL " + state.level + "\nGet Ready: " + Math.ceil(state.prepRemaining);
         }
         updateHud();
         draw();
         state.rafId = raf(update);
         return;
+      }
+
+      if (state.autoTapEnabled) {
+        state.autoTapAccumMs += delta * 1000;
+        while (state.autoTapAccumMs >= AUTO_TAP_INTERVAL_MS) {
+          state.autoTapAccumMs -= AUTO_TAP_INTERVAL_MS;
+          runAutoTap();
+          if (!state.running || state.inPrep) break;
+        }
       }
 
       state.timeLeft -= TIMER_DRAIN_RATE * delta;
@@ -671,6 +788,7 @@
           if (d <= state.radius * PERFECT_ZONE) {
             bonus = 1.0;
             zone = "PERFECT";
+            state.perfectTapCount += 1;
             addPerfectWave(p.x, p.y);
             playSfx(perfectTapSfx);
           } else if (d <= state.radius * GOOD_ZONE) {
@@ -681,9 +799,7 @@
           addFloatingText(p.x, p.y, zone + " +" + bonus.toFixed(1) + "s", "#d9efff");
 
           const reactionTime = (tapTime - state.spawnTime) / 1000;
-          if (reactionTime < 0.5) state.currentShrink += 0.1;
-          else if (reactionTime > 1.0) state.currentShrink -= 0.1;
-          state.currentShrink = clamp(state.currentShrink, MIN_SHRINK, MAX_SHRINK);
+          updateShrinkAfterSuccess(reactionTime);
 
           state.timeLeft = Math.min(state.timeLeft + bonus, state.goalTime);
           state.taps += 1;
@@ -709,17 +825,22 @@
     // ===== Start / Restart =====
     function startGame() {
       if (!ctx) return;
+      const levelConfig = getLevelConfig(1);
       state.running = true;
       state.taps = 0;
       state.level = 1;
-      state.goalTime = GOAL_TIME_START;
-      state.levelStartTime = START_TIME;
-      state.timeLeft = START_TIME;
+      state.goalTime = levelConfig.targetTime;
+      state.levelStartTime = levelConfig.startTime;
+      state.timeLeft = levelConfig.startTime;
       state.currentShrink = BASE_SHRINK;
       state.floatingTexts = [];
       state.perfectWaves = [];
+      state.perfectTapCount = 0;
+      state.hardMode = false;
+      state.hardTapCount = 0;
       state.inPrep = true;
       state.prepRemaining = PREP_TIME;
+      state.autoTapAccumMs = 0;
       state.radius = INITIAL_RADIUS;
       state.circles = [];
       playBgMusic();
@@ -748,7 +869,9 @@
       updateHud();
       renderComments();
       draw();
+      setAutoTap(false);
       startBtn.addEventListener("click", startGame);
+      if (autoBtn) autoBtn.addEventListener("click", toggleAutoTap);
       canvas.addEventListener("click", handleClick);
       canvas.addEventListener("touchstart", handleClick, { passive: false });
       if (feedbackFormEl) feedbackFormEl.addEventListener("submit", handleFeedbackSubmit);
