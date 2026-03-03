@@ -13,7 +13,6 @@
     ];
     const PREP_TIME = 3;
     const MAX_LEVEL = LEVELS.length;
-    const AUTO_TAP_INTERVAL_MS = 90;
     const HARD_SHRINK_START = 2.0;
     const HARD_SHRINK_GOAL = 0.9;
     const HARD_SECOND_BLUE_CHANCE = 0.5;
@@ -58,7 +57,6 @@
     const targetEl = document.getElementById("target");
     const fillEl = document.getElementById("fill");
     const startBtn = document.getElementById("startBtn");
-    const autoBtn = document.getElementById("autoBtn");
     const overlay = document.getElementById("overlay");
     const loseFillEl = document.getElementById("loseFill");
     const bgLayerEl = document.getElementById("bgLayer");
@@ -100,8 +98,6 @@
       prepRemaining: 0,
       rafId: 0,
       comments: [],
-      autoTapEnabled: false,
-      autoTapAccumMs: 0,
       perfectTapCount: 0,
       hardMode: false,
       hardTapCount: 0
@@ -362,46 +358,6 @@
       updateHud();
       overlay.textContent = "HARD MODE\nGet Ready: " + Math.ceil(state.prepRemaining);
       overlay.style.display = "grid";
-      draw();
-    }
-
-    function setAutoTap(enabled) {
-      state.autoTapEnabled = Boolean(enabled);
-      state.autoTapAccumMs = 0;
-      if (autoBtn) autoBtn.textContent = state.autoTapEnabled ? "Auto: ON" : "Auto: OFF";
-    }
-
-    function toggleAutoTap() {
-      setAutoTap(!state.autoTapEnabled);
-    }
-
-    function runAutoTap() {
-      if (!state.running || state.inPrep || !state.autoTapEnabled) return;
-      let correct = null;
-      for (let i = 0; i < state.circles.length; i += 1) {
-        if (state.circles[i].correct) {
-          correct = state.circles[i];
-          break;
-        }
-      }
-      if (!correct) return;
-
-      const tapTime = performance.now();
-      const bonus = 1.0;
-      addPerfectWave(correct.x, correct.y);
-      playSfx(perfectTapSfx);
-      addFloatingText(correct.x, correct.y, "PERFECT +" + bonus.toFixed(1) + "s", "#d9efff");
-      state.perfectTapCount += 1;
-
-      const reactionTime = (tapTime - state.spawnTime) / 1000;
-      updateShrinkAfterSuccess(reactionTime);
-
-      state.timeLeft = Math.min(state.timeLeft + bonus, state.goalTime);
-      state.taps += 1;
-
-      if (state.timeLeft >= state.goalTime) { applyNextLevel(); return; }
-      updateHud();
-      spawnCircles();
       draw();
     }
 
@@ -731,15 +687,6 @@
         return;
       }
 
-      if (state.autoTapEnabled) {
-        state.autoTapAccumMs += delta * 1000;
-        while (state.autoTapAccumMs >= AUTO_TAP_INTERVAL_MS) {
-          state.autoTapAccumMs -= AUTO_TAP_INTERVAL_MS;
-          runAutoTap();
-          if (!state.running || state.inPrep) break;
-        }
-      }
-
       state.timeLeft -= TIMER_DRAIN_RATE * delta;
       if (state.timeLeft <= 0) { endGame(false); return; }
 
@@ -840,7 +787,6 @@
       state.hardTapCount = 0;
       state.inPrep = true;
       state.prepRemaining = PREP_TIME;
-      state.autoTapAccumMs = 0;
       state.radius = INITIAL_RADIUS;
       state.circles = [];
       playBgMusic();
@@ -869,9 +815,7 @@
       updateHud();
       renderComments();
       draw();
-      setAutoTap(false);
       startBtn.addEventListener("click", startGame);
-      if (autoBtn) autoBtn.addEventListener("click", toggleAutoTap);
       canvas.addEventListener("click", handleClick);
       canvas.addEventListener("touchstart", handleClick, { passive: false });
       if (feedbackFormEl) feedbackFormEl.addEventListener("submit", handleFeedbackSubmit);
