@@ -76,6 +76,14 @@
       max-width: calc(100% - 130px);
       pointer-events: none;
     }
+    #hudActions {
+      grid-column: 2;
+      grid-row: 1;
+      justify-self: end;
+      align-self: start;
+      display: grid;
+      gap: 6px;
+    }
     #timeMeter {
       width: 100%;
       display: grid;
@@ -102,10 +110,6 @@
       text-align: center;
     }
     button {
-      grid-column: 2;
-      grid-row: 1;
-      justify-self: end;
-      align-self: start;
       border: 1px solid #3d4659;
       background: #202636;
       color: #eef2f7;
